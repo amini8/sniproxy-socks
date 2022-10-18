@@ -1,0 +1,25 @@
+.:53 {
+    bufsize 512
+    errors
+    log . {
+        class all
+    }
+    health {
+        lameduck 20s
+    }
+
+    hosts {
+        192.168.28.171 umber-lobby.prod.demonware.net
+        192.168.28.171 pipes-prod-glutton.p4.ekube.demonware.net pipes-prod-glutton.public.aws.demonware.net
+        192.168.28.171 prod-data.energon.activision.com
+        192.168.28.171 e40773.api8.akamaiedge.net
+        192.168.28.171 ps4.np.playstation.net ps4.np.playstation.net.edgekey.net ps4.np.playstation.net.edgekey.net.globalredir.akadns.net
+        fallthrough
+    }
+
+    forward . 8.8.8.8 1.1.1.1
+    cache 900
+
+    reload
+    minimal
+}

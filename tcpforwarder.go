@@ -1,71 +1,63 @@
 package main
 
 import (
+	"context"
 	"io"
 	"log"
 	"net"
 	"os"
+	"sync"
 	"time"
 
 	"golang.org/x/net/proxy"
 )
 
-func StartTCPForwarderServer(source, target string, done chan int) {
+func StartTCPForwarderServer(ctx context.Context, source, target string) error {
 	listener, err := net.Listen("tcp", source)
 	if err != nil {
-		log.Fatalf("Failed to setup listener: %v", err)
+		return err
 	}
+	defer listener.Close()
 
-	log.Println("listening TCP forwarder on", source, " and forwarding to", target)
+	log.Printf("listening TCP forwarder on %s and forwarding to %s", source, target)
 
 	for {
-		conn, err := listener.Accept()
-		if err != nil {
-			log.Fatalf("ERROR: failed to accept listener: %v", err)
+		select {
+		case <-ctx.Done():
+			return nil
+		default:
+			conn, err := listener.Accept()
+			if err != nil {
+				log.Printf("failed to accept listener: %v", err)
+				continue
+			}
+			log.Printf("accepted connection from %v", conn.RemoteAddr().String())
+			go forward(ctx, conn, target)
 		}
-		log.Printf("Accepted connection from %v\n", conn.RemoteAddr().String())
-		go forward(conn, target)
 	}
 }
 
-func forward(sourceConn net.Conn, target string) {
+func forward(ctx context.Context, sourceConn net.Conn, target string) {
+	defer sourceConn.Close()
+
 	backendDialer := net.Dialer{
 		Timeout: 5 * time.Second,
 	}
 
 	proxyHost := os.Getenv("PROXY_HOST")
-
 	if proxyHost == "" {
 		proxyHost = "127.0.0.1:1089"
 	}
 
 	dialSocksProxy, err := proxy.SOCKS5("tcp", proxyHost, nil, &backendDialer)
 	if err != nil {
-		log.Print(err)
+		log.Printf("failed to dial SOCKS5 proxy: %v", err)
 		return
 	}
 
 	targetConn, err := dialSocksProxy.Dial("tcp", target)
-
 	if err != nil {
-		log.Print(err)
+		log.Printf("failed to dial target: %v", err)
 		return
 	}
-
-	if err != nil {
-		log.Printf("Dial failed: %v", err)
-		defer targetConn.Close()
-		return
-	}
-	log.Printf("Forwarding from %v to %v\n", sourceConn.LocalAddr(), targetConn.RemoteAddr())
-	go func() {
-		defer targetConn.Close()
-		defer sourceConn.Close()
-		io.Copy(targetConn, sourceConn)
-	}()
-	go func() {
-		defer targetConn.Close()
-		defer sourceConn.Close()
-		io.Copy(sourceConn, targetConn)
-	}()
-}
+	defer targetConn.Close
